@@ -24,6 +24,10 @@ namespace Files.App.Helpers
 				path = $"shell:{path}";
 			}
 
+			// Fast-exit when no data is requested – avoids spinning up a STA thread
+			if (!getFolder && !getEnumerate)
+				return (null, new List<ShellFileItem>());
+
 			return await Win32Helper.StartSTATask(() =>
 			{
 				var flc = new List<ShellFileItem>();
@@ -46,15 +50,34 @@ namespace Files.App.Helpers
 					if (getFolder)
 						folder = ShellFolderExtensions.GetShellFileItem(shellFolder);
 
-					if (getEnumerate)
+					// Enumerate only when requested and avoid LINQ Skip/Take overhead
+					if (getEnumerate && count != 0)
 					{
-						foreach (var folderItem in shellFolder.Skip(from).Take(count))
+						int end = count == int.MaxValue ? int.MaxValue : from + count;
+						int index = 0;
+
+						foreach (var folderItem in shellFolder)
 						{
+							// Skip items until we reach the start offset
+							if (index < from)
+							{
+								index++;
+								folderItem.Dispose();
+								continue;
+							}
+
+							// Break when we have collected the requested slice
+							if (index >= end)
+							{
+								folderItem.Dispose();
+								break;
+							}
+
 							try
 							{
-								var shellFileItem = folderItem is ShellLink link ?
-									ShellFolderExtensions.GetShellLinkItem(link) :
-									ShellFolderExtensions.GetShellFileItem(folderItem);
+								var shellFileItem = folderItem is ShellLink link
+									? ShellFolderExtensions.GetShellLinkItem(link)
+									: ShellFolderExtensions.GetShellFileItem(folderItem);
 
 								foreach (var prop in properties)
 									shellFileItem.Properties[prop] = SafetyExtensions.IgnoreExceptions(() => folderItem.Properties[prop]);
@@ -69,6 +92,8 @@ namespace Files.App.Helpers
 							{
 								folderItem.Dispose();
 							}
+
+							index++;
 						}
 					}
 				}
