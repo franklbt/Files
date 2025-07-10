@@ -72,8 +72,8 @@ namespace Files.App.Data.Models
 
 		public async Task<LocationItem> CreateLocationItemFromPathAsync(string path)
 		{
-			// Directly resolve the folder; avoids an extra GetRootFromPathAsync call for every item
-			var res = await FilesystemTasks.Wrap(() => StorageFileExtensions.DangerousGetFolderFromPathAsync(path));
+			var item = await FilesystemTasks.Wrap(() => DriveHelpers.GetRootFromPathAsync(path));
+			var res = await FilesystemTasks.Wrap(() => StorageFileExtensions.DangerousGetFolderFromPathAsync(path, item));
 			LocationItem locationItem;
 
 			if (string.Equals(path, Constants.UserEnvironmentPaths.RecycleBinPath, StringComparison.OrdinalIgnoreCase))
